@@ -2,7 +2,8 @@ name: Build DreamByte Launcher
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -10,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -19,6 +20,23 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
+
+      - name: Install Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Generate Gradle Wrapper
+        run: |
+          gradle wrapper \
+            --gradle-version 9.3.1 \
+            --distribution-type bin
+
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Verify Gradle Wrapper
+        run: ./gradlew --version
 
       - name: Generate debug keystore
         run: |
@@ -33,10 +51,7 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Make Gradle executable
-        run: chmod +x gradlew
-
-      - name: Build APK
+      - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
