@@ -1,0 +1,6 @@
+{
+  "name": "DreamByte Launcher",
+  "description": "Next-generation Android launcher and customization layer by DreamByte Studios for DreamByte OS, featuring Modern Holographic Glass, Holo, and Classic appearances.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
