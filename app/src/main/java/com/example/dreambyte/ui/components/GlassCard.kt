@@ -37,25 +37,27 @@ fun GlassCard(
   val cardShape = shape ?: style.cardShape
   val interactionSource = remember { MutableInteractionSource() }
 
-  val actualBorder = borderStroke ?: when (style.appearance) {
-    DreamByteAppearance.MODERN -> BorderStroke(
-      style.borderStrokeWidth,
-      Brush.linearGradient(
-        colors = listOf(
-          style.borderHighlight,
-          style.borderHighlight.copy(alpha = 0.15f),
-          style.primaryHolo.copy(alpha = 0.6f)
+  val actualBorder = borderStroke ?: remember(style.appearance, style.borderStrokeWidth) {
+    when (style.appearance) {
+      DreamByteAppearance.MODERN -> BorderStroke(
+        style.borderStrokeWidth,
+        Brush.linearGradient(
+          colors = listOf(
+            style.borderHighlight,
+            style.borderHighlight.copy(alpha = 0.15f),
+            style.primaryHolo.copy(alpha = 0.6f)
+          )
         )
       )
-    )
-    DreamByteAppearance.HOLO -> BorderStroke(
-      style.borderStrokeWidth,
-      style.borderHighlight
-    )
-    DreamByteAppearance.CLASSIC -> BorderStroke(
-      style.borderStrokeWidth,
-      style.borderHighlight
-    )
+      DreamByteAppearance.HOLO -> BorderStroke(
+        style.borderStrokeWidth,
+        style.borderHighlight
+      )
+      DreamByteAppearance.CLASSIC -> BorderStroke(
+        style.borderStrokeWidth,
+        style.borderHighlight
+      )
+    }
   }
 
   val baseModifier = modifier

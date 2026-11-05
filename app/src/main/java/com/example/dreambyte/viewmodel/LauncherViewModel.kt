@@ -76,6 +76,22 @@ class LauncherViewModel(private val repository: LauncherRepository) : ViewModel(
   private val _selectedMoveItemId = MutableStateFlow<String?>(null)
   val selectedMoveItemId: StateFlow<String?> = _selectedMoveItemId.asStateFlow()
 
+  // Widget Picker Dialog
+  private val _isWidgetPickerOpen = MutableStateFlow(false)
+  val isWidgetPickerOpen: StateFlow<Boolean> = _isWidgetPickerOpen.asStateFlow()
+
+  fun openWidgetPicker() { _isWidgetPickerOpen.value = true }
+  fun closeWidgetPicker() { _isWidgetPickerOpen.value = false }
+
+  fun addWidgetToDesktop(widgetType: com.example.dreambyte.model.WidgetType, page: Int = 0) {
+    repository.addWidgetToDesktop(widgetType, page)
+    closeWidgetPicker()
+  }
+
+  fun moveItemToCell(itemId: String, targetPage: Int, targetCellX: Int, targetCellY: Int) {
+    repository.moveItemToCell(itemId, targetPage, targetCellX, targetCellY)
+  }
+
   // Filtered apps for drawer
   val filteredApps: StateFlow<List<AppInfo>> = combine(installedApps, _searchQuery) { apps, query ->
     if (query.isBlank()) {
@@ -97,13 +113,15 @@ class LauncherViewModel(private val repository: LauncherRepository) : ViewModel(
   }
 
   fun checkDefaultLauncherStatus(context: Context) {
-    try {
-      val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-      val resolveInfo = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
-      val defaultPkg = resolveInfo?.activityInfo?.packageName
-      _isDefaultLauncher.value = defaultPkg == context.packageName
-    } catch (_: Exception) {
-      _isDefaultLauncher.value = false
+    viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+      try {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolveInfo = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        val defaultPkg = resolveInfo?.activityInfo?.packageName
+        _isDefaultLauncher.value = defaultPkg == context.packageName
+      } catch (_: Throwable) {
+        _isDefaultLauncher.value = false
+      }
     }
   }
 
@@ -376,8 +394,11 @@ class LauncherViewModel(private val repository: LauncherRepository) : ViewModel(
   }
 
   fun refreshData() {
-    repository.loadInstalledApps()
     repository.refreshHardwareMetrics()
+  }
+
+  fun forceReloadApps() {
+    repository.loadInstalledApps()
   }
 
   override fun onCleared() {

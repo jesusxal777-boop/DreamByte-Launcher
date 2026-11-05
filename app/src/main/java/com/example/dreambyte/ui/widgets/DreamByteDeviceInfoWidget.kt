@@ -98,10 +98,11 @@ fun DreamByteDeviceInfoWidget(
       Spacer(modifier = Modifier.height(12.dp))
 
       // RAM Meter
+      val ramText = String.format(java.util.Locale.US, "%.1fGB / %.1fGB", usedRam / 1024f, metrics.totalRamMb / 1024f)
       MetricBar(
         title = "Memoria RAM",
         icon = Icons.Default.Memory,
-        usedText = "${usedRam / 1024f}GB / ${metrics.totalRamMb / 1024f}GB",
+        usedText = ramText,
         fraction = ramPercent,
         color = style.primaryHolo
       )

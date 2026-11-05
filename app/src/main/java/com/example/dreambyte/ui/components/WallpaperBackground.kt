@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -29,7 +32,9 @@ import com.example.R
 import com.example.dreambyte.data.WallpaperHelper
 import com.example.dreambyte.model.WallpaperType
 import com.example.dreambyte.ui.theme.LocalDreamByteStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 data class TouchRipple(
@@ -52,18 +57,29 @@ fun WallpaperBackground(
   val scope = rememberCoroutineScope()
   val ripples = remember { mutableStateListOf<TouchRipple>() }
 
-  // Load real system wallpaper bitmap if SYSTEM_DEFAULT is chosen
-  val systemWallpaperBitmap = remember(wallpaperType) {
+  var systemWallpaperBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var customWallpaperBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+  // Load real system wallpaper asynchronously on Dispatchers.IO to never block UI thread
+  LaunchedEffect(wallpaperType) {
     if (wallpaperType == WallpaperType.SYSTEM_DEFAULT) {
-      WallpaperHelper.loadSystemWallpaper(context)
-    } else null
+      withContext(Dispatchers.IO) {
+        systemWallpaperBitmap = WallpaperHelper.loadSystemWallpaper(context)
+      }
+    } else {
+      systemWallpaperBitmap = null
+    }
   }
 
-  // Load custom gallery wallpaper bitmap if CUSTOM is chosen
-  val customWallpaperBitmap = remember(wallpaperType, customWallpaperPath) {
+  // Load custom gallery wallpaper asynchronously on Dispatchers.IO
+  LaunchedEffect(wallpaperType, customWallpaperPath) {
     if (wallpaperType == WallpaperType.CUSTOM) {
-      WallpaperHelper.loadCustomWallpaper(customWallpaperPath)
-    } else null
+      withContext(Dispatchers.IO) {
+        customWallpaperBitmap = WallpaperHelper.loadCustomWallpaper(customWallpaperPath)
+      }
+    } else {
+      customWallpaperBitmap = null
+    }
   }
 
   Box(
@@ -72,6 +88,9 @@ fun WallpaperBackground(
       .pointerInput(interactiveParticles) {
         if (interactiveParticles) {
           detectTapGestures { offset ->
+            if (ripples.size >= 3) {
+              ripples.removeAt(0)
+            }
             val id = System.currentTimeMillis() + Random.nextLong(1000)
             val radius = Animatable(0f)
             val alpha = Animatable(0.85f)
@@ -87,19 +106,20 @@ fun WallpaperBackground(
             ripples.add(ripple)
 
             scope.launch {
-              launch {
-                radius.animateTo(
-                  targetValue = 260f,
-                  animationSpec = tween(durationMillis = 750)
-                )
-              }
-              launch {
+              try {
+                launch {
+                  radius.animateTo(
+                    targetValue = 240f,
+                    animationSpec = tween(durationMillis = 600)
+                  )
+                }
                 alpha.animateTo(
                   targetValue = 0f,
-                  animationSpec = tween(durationMillis = 750)
+                  animationSpec = tween(durationMillis = 600)
                 )
+              } finally {
+                ripples.remove(ripple)
               }
-              ripples.remove(ripple)
             }
           }
         }
@@ -169,9 +189,10 @@ fun WallpaperBackground(
       }
 
       WallpaperType.SYSTEM_DEFAULT -> {
-        if (systemWallpaperBitmap != null) {
+        val sysBmp = systemWallpaperBitmap
+        if (sysBmp != null) {
           Image(
-            bitmap = systemWallpaperBitmap.asImageBitmap(),
+            bitmap = sysBmp.asImageBitmap(),
             contentDescription = "Fondo de Pantalla del Sistema",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
@@ -200,9 +221,10 @@ fun WallpaperBackground(
       }
 
       WallpaperType.CUSTOM -> {
-        if (customWallpaperBitmap != null) {
+        val custBmp = customWallpaperBitmap
+        if (custBmp != null) {
           Image(
-            bitmap = customWallpaperBitmap.asImageBitmap(),
+            bitmap = custBmp.asImageBitmap(),
             contentDescription = "Fondo Personalizado",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()

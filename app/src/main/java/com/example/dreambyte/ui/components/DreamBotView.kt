@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,7 +96,7 @@ fun DreamBotCompanionCard(
       Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-          .offset(y = floatAnim.dp)
+          .graphicsLayer { translationY = floatAnim * 6f }
           .size(54.dp)
       ) {
         // Glow behind mascot

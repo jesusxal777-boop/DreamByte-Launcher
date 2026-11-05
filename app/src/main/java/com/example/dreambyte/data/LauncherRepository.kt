@@ -28,16 +28,30 @@ import com.example.dreambyte.model.IconSize
 import com.example.dreambyte.model.LauncherSettings
 import com.example.dreambyte.model.WallpaperType
 import com.example.dreambyte.model.WidgetType
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class LauncherRepository(private val context: Context) {
+
+  private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val iconCache = ConcurrentHashMap<String, Bitmap>()
+  private val iconCacheDir by lazy {
+    File(context.cacheDir, "dreambyte_icons").apply { if (!exists()) mkdirs() }
+  }
+  private var loadAppsJob: kotlinx.coroutines.Job? = null
+  private var isBatteryReceiverRegistered = false
+  private var isPackageReceiverRegistered = false
 
   private val prefs: SharedPreferences =
     context.getSharedPreferences("dreambyte_launcher_prefs", Context.MODE_PRIVATE)
@@ -57,7 +71,13 @@ class LauncherRepository(private val context: Context) {
   private val _settings = MutableStateFlow(loadSettings())
   val settings: StateFlow<LauncherSettings> = _settings.asStateFlow()
 
-  private val _deviceMetrics = MutableStateFlow(readMetrics())
+  // Fast initial metrics to eliminate main thread I/O lag at cold start
+  private val _deviceMetrics = MutableStateFlow(
+    DeviceMetrics(
+      deviceModel = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
+      androidVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+    )
+  )
   val deviceMetrics: StateFlow<DeviceMetrics> = _deviceMetrics.asStateFlow()
 
   private val batteryReceiver = object : BroadcastReceiver() {
@@ -68,14 +88,19 @@ class LauncherRepository(private val context: Context) {
 
   private val packageReceiver = object : BroadcastReceiver() {
     override fun onReceive(c: Context?, intent: Intent?) {
-      // Reload installed apps whenever a package is added, removed or changed
+      // Reload installed apps asynchronously in background
       loadInstalledApps()
     }
   }
 
   init {
+    loadCachedAppsCatalog()
     loadDesktopAndDock()
     registerReceivers()
+    // Asynchronously refresh real hardware metrics on IO dispatcher
+    repoScope.launch {
+      refreshHardwareMetrics()
+    }
     loadInstalledApps()
   }
 
@@ -83,8 +108,9 @@ class LauncherRepository(private val context: Context) {
     try {
       val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
       val batteryStatusIntent = context.registerReceiver(batteryReceiver, batteryFilter)
+      isBatteryReceiverRegistered = true
       updateBatteryMetrics(batteryStatusIntent)
-    } catch (_: Exception) {}
+    } catch (_: Throwable) {}
 
     try {
       val packageFilter = IntentFilter().apply {
@@ -93,59 +119,206 @@ class LauncherRepository(private val context: Context) {
         addAction(Intent.ACTION_PACKAGE_REPLACED)
         addDataScheme("package")
       }
-      context.registerReceiver(packageReceiver, packageFilter)
-    } catch (_: Exception) {}
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED)
+      } else {
+        context.registerReceiver(packageReceiver, packageFilter)
+      }
+      isPackageReceiverRegistered = true
+    } catch (_: Throwable) {}
   }
 
   fun unregisterReceivers() {
+    if (isBatteryReceiverRegistered) {
+      try {
+        context.unregisterReceiver(batteryReceiver)
+      } catch (_: Throwable) {}
+      isBatteryReceiverRegistered = false
+    }
+    if (isPackageReceiverRegistered) {
+      try {
+        context.unregisterReceiver(packageReceiver)
+      } catch (_: Throwable) {}
+      isPackageReceiverRegistered = false
+    }
+  }
+
+  private fun loadCachedAppsCatalog() {
+    val cachedJson = prefs.getString("cached_apps_catalog_json", null) ?: return
     try {
-      context.unregisterReceiver(batteryReceiver)
-    } catch (_: Exception) {}
+      val array = JSONArray(cachedJson)
+      val cachedList = mutableListOf<AppInfo>()
+      for (i in 0 until array.length()) {
+        val obj = array.getJSONObject(i)
+        val pkg = obj.getString("pkg")
+        val act = obj.optString("act", "")
+        val lbl = obj.optString("lbl", pkg)
+        val sys = obj.optBoolean("sys", false)
+        val icon = iconCache[pkg] ?: getCachedDiskIcon(pkg)?.also { iconCache[pkg] = it }
+        cachedList.add(
+          AppInfo(
+            packageName = pkg,
+            activityName = act,
+            label = lbl,
+            iconBitmap = icon,
+            isSystemApp = sys
+          )
+        )
+      }
+      if (cachedList.isNotEmpty() && _installedApps.value.isEmpty()) {
+        _installedApps.value = cachedList.sortedBy { it.label.lowercase() }
+      }
+    } catch (_: Throwable) {}
+  }
+
+  private fun saveCachedAppsCatalog(apps: List<AppInfo>) {
     try {
-      context.unregisterReceiver(packageReceiver)
-    } catch (_: Exception) {}
+      val array = JSONArray()
+      for (app in apps) {
+        val obj = JSONObject().apply {
+          put("pkg", app.packageName)
+          put("act", app.activityName)
+          put("lbl", app.label)
+          put("sys", app.isSystemApp)
+        }
+        array.put(obj)
+      }
+      prefs.edit().putString("cached_apps_catalog_json", array.toString()).apply()
+    } catch (_: Throwable) {}
+  }
+
+  private fun getCachedDiskIcon(packageName: String): Bitmap? {
+    return try {
+      val file = File(iconCacheDir, "$packageName.png")
+      if (file.exists() && file.length() > 0) {
+        android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+      } else null
+    } catch (_: Throwable) {
+      null
+    }
+  }
+
+  private fun saveIconToDiskCache(packageName: String, bitmap: Bitmap) {
+    try {
+      val file = File(iconCacheDir, "$packageName.png")
+      java.io.FileOutputStream(file).use { out ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+      }
+    } catch (_: Throwable) {}
   }
 
   fun loadInstalledApps() {
-    val pm = context.packageManager
-    val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
-      addCategory(Intent.CATEGORY_LAUNCHER)
-    }
-
-    val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      pm.queryIntentActivities(mainIntent, PackageManager.ResolveInfoFlags.of(0L))
-    } else {
-      @Suppress("DEPRECATION")
-      pm.queryIntentActivities(mainIntent, 0)
-    }
-
-    val appsList = resolveInfos.mapNotNull { resolveInfo ->
+    loadAppsJob?.cancel()
+    loadAppsJob = repoScope.launch {
       try {
-        val packageName = resolveInfo.activityInfo.packageName
-        // Do not include DreamByte Launcher itself in the apps list if we want to avoid self-launch loop
-        val activityName = resolveInfo.activityInfo.name
-        val label = resolveInfo.loadLabel(pm).toString().ifBlank { packageName }
-        val iconDrawable = resolveInfo.loadIcon(pm)
-        val iconBitmap = drawableToBitmap(iconDrawable)
-        val isSystem = (resolveInfo.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+        val pm = context.packageManager
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+          addCategory(Intent.CATEGORY_LAUNCHER)
+        }
 
-        AppInfo(
-          packageName = packageName,
-          activityName = activityName,
-          label = label,
-          iconBitmap = iconBitmap,
-          isSystemApp = isSystem
-        )
-      } catch (_: Exception) {
-        null
-      }
-    }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+        val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          pm.queryIntentActivities(mainIntent, PackageManager.ResolveInfoFlags.of(0L))
+        } else {
+          @Suppress("DEPRECATION")
+          pm.queryIntentActivities(mainIntent, 0)
+        }
 
-    _installedApps.value = appsList
+        // Fast map lookup: O(1) instead of repeated O(N) search
+        val resolveMap = resolveInfos.associateBy { it.activityInfo.packageName }
 
-    // If first run, initialize default desktop and dock
-    if (_desktopItems.value.isEmpty()) {
-      seedDefaultDesktop(appsList)
+        // Fast Phase 1: Build quick list with memory or disk cached icons (<10ms)
+        val initialList = resolveInfos.mapNotNull { resolveInfo ->
+          try {
+            val packageName = resolveInfo.activityInfo.packageName
+            val activityName = resolveInfo.activityInfo.name
+            val label = resolveInfo.loadLabel(pm).toString().ifBlank { packageName }
+            val cachedIcon = iconCache[packageName] ?: getCachedDiskIcon(packageName)?.also {
+              iconCache[packageName] = it
+            }
+            val isSystem = (resolveInfo.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+
+            AppInfo(
+              packageName = packageName,
+              activityName = activityName,
+              label = label,
+              iconBitmap = cachedIcon,
+              isSystemApp = isSystem
+            )
+          } catch (_: Throwable) {
+            null
+          }
+        }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+
+        _installedApps.value = initialList
+        saveCachedAppsCatalog(initialList)
+
+        // If first run, initialize default desktop and dock immediately with zero lag
+        if (_desktopItems.value.isEmpty()) {
+          seedDefaultDesktop(initialList)
+        }
+
+        // Phase 2: Prioritize Desktop and Dock apps first for instant home screen render (<30ms)
+        val priorityPkgs = (_desktopItems.value.mapNotNull { it.packageName } +
+          _dockApps.value +
+          _folders.value.flatMap { it.packageNames }).toSet()
+
+        val currentMap = initialList.associateBy { it.packageName }.toMutableMap()
+        var priorityUpdated = false
+
+        for (pkg in priorityPkgs) {
+          val app = currentMap[pkg] ?: continue
+          if (app.iconBitmap == null) {
+            val resolve = resolveMap[pkg]
+            val drawable = try { resolve?.loadIcon(pm) } catch (_: Throwable) { null }
+            if (drawable != null) {
+              val bmp = drawableToBitmap(drawable)
+              if (bmp != null) {
+                iconCache[pkg] = bmp
+                saveIconToDiskCache(pkg, bmp)
+                currentMap[pkg] = app.copy(iconBitmap = bmp)
+                priorityUpdated = true
+              }
+            }
+          }
+        }
+
+        if (priorityUpdated) {
+          _installedApps.value = currentMap.values.toList().sortedBy { it.label.lowercase() }
+        }
+
+        // Phase 3: Decode remaining icons progressively in non-blocking batches
+        var batchCount = 0
+        for ((pkg, app) in currentMap.entries) {
+          if (app.iconBitmap == null) {
+            val resolve = resolveMap[pkg]
+            val drawable = try { resolve?.loadIcon(pm) } catch (_: Throwable) { null }
+            if (drawable != null) {
+              val bmp = drawableToBitmap(drawable)
+              if (bmp != null) {
+                iconCache[pkg] = bmp
+                saveIconToDiskCache(pkg, bmp)
+                currentMap[pkg] = app.copy(iconBitmap = bmp)
+                batchCount++
+              }
+            }
+
+            // Yield cooperatively every 8 icons so UI stays at maximum frame rate
+            if (batchCount >= 8) {
+              _installedApps.value = currentMap.values.toList().sortedBy { it.label.lowercase() }
+              batchCount = 0
+              kotlinx.coroutines.yield()
+            }
+          }
+        }
+
+        if (batchCount > 0) {
+          val list = currentMap.values.toList().sortedBy { it.label.lowercase() }
+          _installedApps.value = list
+          saveCachedAppsCatalog(list)
+        }
+      } catch (_: kotlinx.coroutines.CancellationException) {
+        // Task cancelled normally, ignore
+      } catch (_: Throwable) {}
     }
   }
 
@@ -174,11 +347,16 @@ class LauncherRepository(private val context: Context) {
   }
 
   fun refreshHardwareMetrics() {
-    _deviceMetrics.value = readMetrics().copy(
-      batteryLevel = _deviceMetrics.value.batteryLevel,
-      isCharging = _deviceMetrics.value.isCharging,
-      batteryStatus = _deviceMetrics.value.batteryStatus
-    )
+    repoScope.launch {
+      try {
+        val metrics = readMetrics()
+        _deviceMetrics.value = metrics.copy(
+          batteryLevel = _deviceMetrics.value.batteryLevel,
+          isCharging = _deviceMetrics.value.isCharging,
+          batteryStatus = _deviceMetrics.value.batteryStatus
+        )
+      } catch (_: Throwable) {}
+    }
   }
 
   private fun readMetrics(): DeviceMetrics {
@@ -432,6 +610,42 @@ class LauncherRepository(private val context: Context) {
           if (found) break
         }
         items[index] = item.copy(page = targetPage, cellX = freeX, cellY = freeY)
+        _desktopItems.value = items
+        saveDesktopItems(items)
+      }
+    }
+  }
+
+  fun addWidgetToDesktop(widgetType: WidgetType, page: Int = 0) {
+    val items = _desktopItems.value.toMutableList()
+    val maxCols = _settings.value.gridCols
+    val pageItems = items.filter { it.page == page }
+    val nextY = (pageItems.maxOfOrNull { it.cellY } ?: -1) + 1
+    val newItem = DesktopItem(
+      id = "widget_${widgetType.name.lowercase()}_${UUID.randomUUID().toString().take(6)}",
+      type = DesktopItemType.WIDGET,
+      page = page,
+      cellX = 0,
+      cellY = nextY,
+      spanX = maxCols,
+      spanY = if (widgetType == WidgetType.CLOCK) 2 else 1,
+      widgetType = widgetType
+    )
+    items.add(newItem)
+    _desktopItems.value = items
+    saveDesktopItems(items)
+  }
+
+  fun moveItemToCell(itemId: String, targetPage: Int, targetCellX: Int, targetCellY: Int) {
+    val items = _desktopItems.value.toMutableList()
+    val index = items.indexOfFirst { it.id == itemId }
+    if (index != -1) {
+      val existingItemAtTarget = items.find { it.page == targetPage && it.cellX == targetCellX && it.cellY == targetCellY && it.id != itemId }
+      if (existingItemAtTarget != null) {
+        // Swap them!
+        swapDesktopItems(itemId, existingItemAtTarget.id)
+      } else {
+        items[index] = items[index].copy(page = targetPage, cellX = targetCellX, cellY = targetCellY)
         _desktopItems.value = items
         saveDesktopItems(items)
       }
@@ -749,16 +963,19 @@ class LauncherRepository(private val context: Context) {
     }
   }
 
-  private fun drawableToBitmap(drawable: Drawable): Bitmap {
-    if (drawable is BitmapDrawable && drawable.bitmap != null) {
-      return drawable.bitmap
+  private fun drawableToBitmap(drawable: Drawable): Bitmap? {
+    return try {
+      val targetSize = 96
+      val bitmap = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(bitmap)
+      drawable.setBounds(0, 0, targetSize, targetSize)
+      drawable.draw(canvas)
+      bitmap
+    } catch (_: OutOfMemoryError) {
+      System.gc()
+      null
+    } catch (_: Throwable) {
+      null
     }
-    val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
-    val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    drawable.setBounds(0, 0, canvas.width, canvas.height)
-    drawable.draw(canvas)
-    return bitmap
   }
 }

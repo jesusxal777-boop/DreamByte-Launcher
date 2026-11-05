@@ -58,9 +58,9 @@ fun DreamByteClockWidget(
     }
   }
 
-  val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-  val secondsFormat = SimpleDateFormat("ss", Locale.getDefault())
-  val dateFormat = SimpleDateFormat("EEEE, d 'de' MMMM", Locale("es", "ES"))
+  val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+  val secondsFormat = remember { SimpleDateFormat("ss", Locale.getDefault()) }
+  val dateFormat = remember { SimpleDateFormat("EEEE, d 'de' MMMM", Locale.forLanguageTag("es-ES")) }
 
   val timeString = timeFormat.format(currentTime)
   val secondsString = secondsFormat.format(currentTime)

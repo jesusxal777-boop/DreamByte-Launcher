@@ -42,6 +42,8 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wallpaper
+import android.app.Activity
+import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -52,6 +54,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +76,7 @@ import com.example.dreambyte.model.WallpaperType
 import com.example.dreambyte.ui.components.DreamBotAvatar
 import com.example.dreambyte.ui.components.GlassCard
 import com.example.dreambyte.ui.theme.LocalDreamByteStyle
+import com.example.dreambyte.service.PhoneMcpOverlayManager
 
 @Composable
 fun SettingsScreen(
@@ -518,6 +525,125 @@ fun SettingsScreen(
                 checkedTrackColor = style.primaryHolo.copy(alpha = 0.3f)
               )
             )
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(24.dp))
+
+      // Section: PhoneMCP Overlay & Automatización
+      SettingsSectionHeader(title = "OVERLAY DE PHONEMCP Y AUTOMATIZACIÓN", icon = Icons.Default.NearMe)
+      Spacer(modifier = Modifier.height(8.dp))
+      GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          val hasOverlayPermission = remember { PhoneMcpOverlayManager.canDrawOverlays(context) }
+          var isOverlayRunning by remember { mutableStateOf(PhoneMcpOverlayManager.isRunning()) }
+
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Overlay PhoneMCP Activo",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = style.textPrimary
+              )
+              Text(
+                text = if (isOverlayRunning) "Puntero (FLAG_NOT_TOUCHABLE) y botón PARAR en pantalla" else "Activa el overlay para control y automatización PhoneMCP",
+                fontSize = 11.5.sp,
+                color = if (isOverlayRunning) Color(0xFF10B981) else style.textMuted
+              )
+            }
+            Switch(
+              checked = isOverlayRunning,
+              onCheckedChange = { enable ->
+                if (enable) {
+                  if (PhoneMcpOverlayManager.canDrawOverlays(context)) {
+                    PhoneMcpOverlayManager.startOverlay(context)
+                    isOverlayRunning = true
+                  } else {
+                    (context as? Activity)?.let { PhoneMcpOverlayManager.requestOverlayPermission(it) }
+                  }
+                } else {
+                  PhoneMcpOverlayManager.stopOverlay(context)
+                  isOverlayRunning = false
+                }
+              },
+              colors = SwitchDefaults.colors(
+                checkedThumbColor = style.primaryHolo,
+                checkedTrackColor = style.primaryHolo.copy(alpha = 0.3f)
+              )
+            )
+          }
+
+          if (!hasOverlayPermission) {
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedButton(
+              onClick = {
+                (context as? Activity)?.let { PhoneMcpOverlayManager.requestOverlayPermission(it) }
+              },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Text("Conceder Permiso de Superposición", fontSize = 12.sp, color = style.primaryHolo)
+            }
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
+
+          // Architecture verification callout
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(8.dp))
+              .background(style.surfaceGlass)
+              .border(0.8.dp, style.borderHighlight, RoundedCornerShape(8.dp))
+              .padding(10.dp)
+          ) {
+            Column {
+              Text(
+                text = "ARQUITECTURA DEL OVERLAY PHONEMCP:",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = style.primaryHolo,
+                letterSpacing = 1.sp
+              )
+              Spacer(modifier = Modifier.height(4.dp))
+              Text(text = "✔ Puntero con FLAG_NOT_TOUCHABLE: No intercepta toques en la pantalla.", fontSize = 11.sp, color = style.textPrimary)
+              Text(text = "✔ Botón PARAR independiente: Ventana separada WRAP_CONTENT para abortar.", fontSize = 11.sp, color = style.textPrimary)
+              Text(text = "✔ Sin MATCH_PARENT: Cero bloqueo de pantalla ni de gestos del usuario.", fontSize = 11.sp, color = style.textPrimary)
+            }
+          }
+
+          if (isOverlayRunning) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              OutlinedButton(
+                onClick = {
+                  val randomX = (100..700).random()
+                  val randomY = (200..1200).random()
+                  PhoneMcpOverlayManager.movePointer(context, randomX, randomY)
+                },
+                modifier = Modifier.weight(1f)
+              ) {
+                Text("Mover Puntero", fontSize = 11.sp, color = style.textPrimary)
+              }
+              OutlinedButton(
+                onClick = {
+                  val randomX = (150..650).random()
+                  val randomY = (250..1100).random()
+                  PhoneMcpOverlayManager.triggerClick(context, randomX, randomY)
+                },
+                modifier = Modifier.weight(1f)
+              ) {
+                Text("Simular Clic", fontSize = 11.sp, color = style.primaryHolo)
+              }
+            }
           }
         }
       }

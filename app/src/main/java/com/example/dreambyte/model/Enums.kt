@@ -29,7 +29,11 @@ enum class WidgetType(val displayName: String) {
   CLOCK("Reloj Holográfico"),
   BATTERY("Estado de Batería"),
   DEVICE_INFO("Diagnóstico del Sistema"),
-  DREAMBOT("DreamBot Compañero")
+  DREAMBOT("DreamBot Compañero"),
+  QUICK_SEARCH("Búsqueda Rápida"),
+  WEATHER("Clima y Pronóstico"),
+  MEDIA_PLAYER("Reproductor Multimedia"),
+  QUICK_NOTES("Notas Rápidas")
 }
 
 enum class DrawerLayoutMode {

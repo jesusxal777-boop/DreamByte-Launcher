@@ -40,5 +40,25 @@ class ExampleUnitTest {
     assertTrue(WallpaperType.entries.contains(WallpaperType.CUSTOM))
     assertEquals("Fondo del Sistema", WallpaperType.SYSTEM_DEFAULT.displayName)
   }
+
+  @Test
+  fun widgetType_entries_includeAllRealWidgets() {
+    val types = com.example.dreambyte.model.WidgetType.entries
+    assertTrue(types.contains(com.example.dreambyte.model.WidgetType.CLOCK))
+    assertTrue(types.contains(com.example.dreambyte.model.WidgetType.WEATHER))
+    assertTrue(types.contains(com.example.dreambyte.model.WidgetType.BATTERY))
+    assertTrue(types.contains(com.example.dreambyte.model.WidgetType.DEVICE_INFO))
+    assertTrue(types.contains(com.example.dreambyte.model.WidgetType.MEDIA_PLAYER))
+    assertTrue(types.contains(com.example.dreambyte.model.WidgetType.QUICK_NOTES))
+  }
+
+  @Test
+  fun phoneMcpOverlay_constantsAndState_areCorrect() {
+    assertEquals("com.example.dreambyte.ACTION_START_PHONEMCP_OVERLAY", com.example.dreambyte.service.PhoneMcpOverlayService.ACTION_START)
+    assertEquals("com.example.dreambyte.ACTION_STOP_PHONEMCP_OVERLAY", com.example.dreambyte.service.PhoneMcpOverlayService.ACTION_STOP)
+    assertEquals("com.example.dreambyte.ACTION_MOVE_POINTER", com.example.dreambyte.service.PhoneMcpOverlayService.ACTION_MOVE_POINTER)
+    assertEquals("com.example.dreambyte.ACTION_TRIGGER_CLICK", com.example.dreambyte.service.PhoneMcpOverlayService.ACTION_TRIGGER_CLICK)
+    assertFalse(com.example.dreambyte.service.PhoneMcpOverlayService.isServiceRunning)
+  }
 }
 

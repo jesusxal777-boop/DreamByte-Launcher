@@ -68,6 +68,7 @@ fun AppIconItem(
   }
 
   val interactionSource = remember { MutableInteractionSource() }
+  val imageBitmap = remember(iconBitmap) { iconBitmap?.asImageBitmap() }
 
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -96,7 +97,7 @@ fun AppIconItem(
         )
       } else {
         // Standard App Icon
-        if (iconBitmap != null) {
+        if (imageBitmap != null) {
           // Subtle glow behind icon in Modern mode
           if (style.appearance == DreamByteAppearance.MODERN) {
             Box(
@@ -112,7 +113,7 @@ fun AppIconItem(
           }
 
           Image(
-            bitmap = iconBitmap.asImageBitmap(),
+            bitmap = imageBitmap,
             contentDescription = label,
             modifier = Modifier
               .size(baseIconDimension)
@@ -223,6 +224,9 @@ private fun FolderPreviewIcon(
         modifier = Modifier.size(dimension * 0.6f)
       )
     } else {
+      val rememberedIcons = remember(folderIcons) {
+        folderIcons.map { it?.asImageBitmap() }
+      }
       // 2x2 mini icons grid inside folder
       Column(
         verticalArrangement = Arrangement.SpaceEvenly,
@@ -233,16 +237,16 @@ private fun FolderPreviewIcon(
           horizontalArrangement = Arrangement.SpaceEvenly,
           modifier = Modifier.fillMaxSize().weight(1f)
         ) {
-          folderIcons.getOrNull(0)?.let { bmp ->
+          rememberedIcons.getOrNull(0)?.let { img ->
             Image(
-              bitmap = bmp.asImageBitmap(),
+              bitmap = img,
               contentDescription = null,
               modifier = Modifier.size(dimension * 0.35f).clip(RoundedCornerShape(4.dp))
             )
           }
-          folderIcons.getOrNull(1)?.let { bmp ->
+          rememberedIcons.getOrNull(1)?.let { img ->
             Image(
-              bitmap = bmp.asImageBitmap(),
+              bitmap = img,
               contentDescription = null,
               modifier = Modifier.size(dimension * 0.35f).clip(RoundedCornerShape(4.dp))
             )
@@ -252,16 +256,16 @@ private fun FolderPreviewIcon(
           horizontalArrangement = Arrangement.SpaceEvenly,
           modifier = Modifier.fillMaxSize().weight(1f)
         ) {
-          folderIcons.getOrNull(2)?.let { bmp ->
+          rememberedIcons.getOrNull(2)?.let { img ->
             Image(
-              bitmap = bmp.asImageBitmap(),
+              bitmap = img,
               contentDescription = null,
               modifier = Modifier.size(dimension * 0.35f).clip(RoundedCornerShape(4.dp))
             )
           }
-          folderIcons.getOrNull(3)?.let { bmp ->
+          rememberedIcons.getOrNull(3)?.let { img ->
             Image(
-              bitmap = bmp.asImageBitmap(),
+              bitmap = img,
               contentDescription = null,
               modifier = Modifier.size(dimension * 0.35f).clip(RoundedCornerShape(4.dp))
             )
