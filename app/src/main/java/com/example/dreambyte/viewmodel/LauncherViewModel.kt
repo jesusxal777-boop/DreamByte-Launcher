@@ -105,11 +105,8 @@ class LauncherViewModel(private val repository: LauncherRepository) : ViewModel(
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   init {
-    viewModelScope.launch {
-      if (!settings.value.firstLaunchCompleted) {
-        _isWelcomeOpen.value = true
-      }
-    }
+    // Desktop is immediately active and unobstructed on launch
+    _isWelcomeOpen.value = false
   }
 
   fun checkDefaultLauncherStatus(context: Context) {

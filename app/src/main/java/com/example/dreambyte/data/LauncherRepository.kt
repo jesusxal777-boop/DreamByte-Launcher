@@ -543,8 +543,8 @@ class LauncherRepository(private val context: Context) {
       } catch (_: Exception) { DrawerLayoutMode.GRID },
       dockItemCount = prefs.getInt("dockItemCount", 5),
       customWallpaperPath = prefs.getString("customWallpaperPath", null),
-      interactiveParticlesEnabled = prefs.getBoolean("interactiveParticlesEnabled", true),
-      firstLaunchCompleted = prefs.getBoolean("firstLaunchCompleted", false)
+      interactiveParticlesEnabled = prefs.getBoolean("interactiveParticlesEnabled", false),
+      firstLaunchCompleted = prefs.getBoolean("firstLaunchCompleted", true)
     )
   }
 

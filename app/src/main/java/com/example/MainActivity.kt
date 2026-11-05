@@ -42,9 +42,15 @@ class MainActivity : ComponentActivity() {
     setContent {
       val settings by launcherViewModel.settings.collectAsState()
 
-      // The home launcher stays on screen; back button when at base home shouldn't finish the activity
+      // The home launcher stays on screen; back button dismisses any open overlay/sheet
       BackHandler(enabled = true) {
-        if (launcherViewModel.isSettingsOpen.value) {
+        if (launcherViewModel.isWelcomeOpen.value) {
+          launcherViewModel.closeWelcome()
+        } else if (launcherViewModel.isHudOpen.value) {
+          launcherViewModel.closeHud()
+        } else if (launcherViewModel.isWidgetPickerOpen.value) {
+          launcherViewModel.closeWidgetPicker()
+        } else if (launcherViewModel.isSettingsOpen.value) {
           launcherViewModel.closeSettings()
         } else if (launcherViewModel.isDrawerOpen.value) {
           launcherViewModel.closeDrawer()
@@ -52,8 +58,9 @@ class MainActivity : ComponentActivity() {
           launcherViewModel.closeFolder()
         } else if (launcherViewModel.selectedAppContext.value != null) {
           launcherViewModel.closeAppContext()
+        } else if (launcherViewModel.isEditMode.value) {
+          launcherViewModel.exitEditMode()
         }
-        // At desktop root, ignore back press to remain in launcher
       }
 
       DreamByteThemeProvider(appearance = settings.appearance) {

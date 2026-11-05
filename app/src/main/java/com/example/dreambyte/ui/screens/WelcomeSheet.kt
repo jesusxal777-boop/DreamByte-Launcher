@@ -17,11 +17,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -53,8 +55,19 @@ fun WelcomeSheet(
         .clip(style.cardShape)
         .background(style.surfaceOverlay)
         .border(style.borderStrokeWidth, style.borderHighlight, style.cardShape)
-        .padding(24.dp)
+        .padding(20.dp)
     ) {
+      IconButton(
+        onClick = onGetStarted,
+        modifier = Modifier.align(Alignment.TopEnd)
+      ) {
+        Icon(
+          imageVector = Icons.Default.Close,
+          contentDescription = "Cerrar",
+          tint = style.textSecondary
+        )
+      }
+
       Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()

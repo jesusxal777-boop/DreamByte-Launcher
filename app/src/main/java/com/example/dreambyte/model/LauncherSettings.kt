@@ -13,6 +13,6 @@ data class LauncherSettings(
   val drawerLayout: DrawerLayoutMode = DrawerLayoutMode.GRID,
   val dockItemCount: Int = 5,
   val customWallpaperPath: String? = null,
-  val interactiveParticlesEnabled: Boolean = true,
-  val firstLaunchCompleted: Boolean = false
+  val interactiveParticlesEnabled: Boolean = false,
+  val firstLaunchCompleted: Boolean = true
 )

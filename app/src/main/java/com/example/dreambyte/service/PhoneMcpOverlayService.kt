@@ -167,20 +167,22 @@ class PhoneMcpOverlayService : Service() {
       WindowManager.LayoutParams.TYPE_PHONE
     }
 
-    // Explicitly WRAP_CONTENT (strictly NOT MATCH_PARENT)
-    // FLAG_NOT_TOUCHABLE ensures the pointer does not intercept any taps or gestures
+    // Exact compact bounds (48dp x 48dp) - strictly NOT MATCH_PARENT
+    // FLAG_NOT_TOUCHABLE guarantees 100% of touches pass through to underlying windows
+    val pointerSize = dpToPx(48)
     pointerParams = WindowManager.LayoutParams(
-      WindowManager.LayoutParams.WRAP_CONTENT,
-      WindowManager.LayoutParams.WRAP_CONTENT,
+      pointerSize,
+      pointerSize,
       overlayType,
       WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-          WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-          WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+          WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
       PixelFormat.TRANSLUCENT
     ).apply {
       gravity = Gravity.TOP or Gravity.START
       x = 300
       y = 600
+      width = pointerSize
+      height = pointerSize
     }
 
     val pointerCustomView = PointerCustomView(this)
@@ -197,8 +199,8 @@ class PhoneMcpOverlayService : Service() {
    * 2. STOP BUTTON OVERLAY WINDOW
    * Rules:
    * - Must be a separate window.
-   * - Must use WRAP_CONTENT (NOT MATCH_PARENT).
-   * - Only the button itself is touchable.
+   * - Must be strictly compact WRAP_CONTENT/fixed pill size (NOT MATCH_PARENT).
+   * - FLAG_NOT_TOUCH_MODAL ensures that any tap outside this tiny button passes through.
    */
   private fun setupStopButtonOverlay() {
     val wm = windowManager ?: return
@@ -210,24 +212,31 @@ class PhoneMcpOverlayService : Service() {
       WindowManager.LayoutParams.TYPE_PHONE
     }
 
-    // Strictly WRAP_CONTENT for both width and height (NO MATCH_PARENT)
+    // Strictly compact bounds (136dp x 44dp pill) - NO MATCH_PARENT
+    val btnW = dpToPx(136)
+    val btnH = dpToPx(44)
     stopButtonParams = WindowManager.LayoutParams(
-      WindowManager.LayoutParams.WRAP_CONTENT,
-      WindowManager.LayoutParams.WRAP_CONTENT,
+      btnW,
+      btnH,
       overlayType,
       WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
           WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
       PixelFormat.TRANSLUCENT
     ).apply {
       gravity = Gravity.TOP or Gravity.END
-      x = 24
-      y = 150
+      x = dpToPx(16)
+      y = dpToPx(60)
+      width = btnW
+      height = btnH
     }
 
     val container = LinearLayout(this).apply {
+      layoutParams = LinearLayout.LayoutParams(btnW, btnH)
       orientation = LinearLayout.HORIZONTAL
       gravity = Gravity.CENTER_VERTICAL
-      setPadding(dpToPx(12), dpToPx(8), dpToPx(14), dpToPx(8))
+      isClickable = true
+      isFocusable = false
+      setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(6))
 
       val bgDrawable = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE

@@ -85,45 +85,49 @@ fun WallpaperBackground(
   Box(
     modifier = modifier
       .fillMaxSize()
-      .pointerInput(interactiveParticles) {
+      .then(
         if (interactiveParticles) {
-          detectTapGestures { offset ->
-            if (ripples.size >= 3) {
-              ripples.removeAt(0)
-            }
-            val id = System.currentTimeMillis() + Random.nextLong(1000)
-            val radius = Animatable(0f)
-            val alpha = Animatable(0.85f)
-            val rippleColor = if (Random.nextBoolean()) style.primaryHolo else style.primaryAccent
+          Modifier.pointerInput(Unit) {
+            detectTapGestures { offset ->
+              if (ripples.size >= 3) {
+                ripples.removeAt(0)
+              }
+              val id = System.currentTimeMillis() + Random.nextLong(1000)
+              val radius = Animatable(0f)
+              val alpha = Animatable(0.85f)
+              val rippleColor = if (Random.nextBoolean()) style.primaryHolo else style.primaryAccent
 
-            val ripple = TouchRipple(
-              id = id,
-              center = offset,
-              radius = radius,
-              alpha = alpha,
-              color = rippleColor
-            )
-            ripples.add(ripple)
+              val ripple = TouchRipple(
+                id = id,
+                center = offset,
+                radius = radius,
+                alpha = alpha,
+                color = rippleColor
+              )
+              ripples.add(ripple)
 
-            scope.launch {
-              try {
-                launch {
-                  radius.animateTo(
-                    targetValue = 240f,
+              scope.launch {
+                try {
+                  launch {
+                    radius.animateTo(
+                      targetValue = 240f,
+                      animationSpec = tween(durationMillis = 600)
+                    )
+                  }
+                  alpha.animateTo(
+                    targetValue = 0f,
                     animationSpec = tween(durationMillis = 600)
                   )
+                } finally {
+                  ripples.remove(ripple)
                 }
-                alpha.animateTo(
-                  targetValue = 0f,
-                  animationSpec = tween(durationMillis = 600)
-                )
-              } finally {
-                ripples.remove(ripple)
               }
             }
           }
+        } else {
+          Modifier
         }
-      }
+      )
   ) {
     // 1. Base Wallpaper Image / Render Layer
     when (wallpaperType) {
